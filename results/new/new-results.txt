@@ -1,0 +1,10 @@
+	Correctness score is: 9.56%
+	Overall score is: 8.47%
+
+	Most correct genre: Calendars, with score: 36.84%
+	Least correct genre: History, with score: 5.26%
+	Average correctness score is: 18.16%
+
+	Best overall genre: Calendars, with score: 33.40%
+	Worst overall genre: History, with score: 4.62%
+	Average overall score: 16.09%
