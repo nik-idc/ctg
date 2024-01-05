@@ -6,8 +6,6 @@ roc-plots/
 cm-plots/
 images/
 images-lite/
-# models/
-# results/
 *.ipynb
 
 test.py
