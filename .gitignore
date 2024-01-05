@@ -6,6 +6,7 @@ roc-plots/
 cm-plots/
 images/
 images-lite/
-*.ipynb
+__pycache__/
 
+*.ipynb
 test.py
