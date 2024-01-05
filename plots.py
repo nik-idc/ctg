@@ -4,7 +4,7 @@ import os
 import PIL
 import PIL.Image
 from sklearn.calibration import label_binarize
-from sklearn.metrics import auc, roc_curve
+from sklearn.metrics import ConfusionMatrixDisplay, auc, confusion_matrix, roc_curve
 from sklearn.model_selection import train_test_split
 import tensorflow as tf
 import pathlib
@@ -73,6 +73,7 @@ COLORS = [
 ]
 NUM_COLORS = len(COLORS)
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         prog='ctg',
@@ -81,7 +82,7 @@ def parse_args():
         'https://paperswithcode.com/paper/judging-a-book-by-its-cover'
         '\nAll credit goes to the people behind that study and dataset.')
 
-    parser.add_argument('-a', '--use_all', action='store_true', default=False)
+    parser.add_argument('-a', '--use_all', action='store_true', default=True)
     parser.add_argument('-n', '--model_names',
                         choices=MODEL_NAMES,
                         action='append')
@@ -92,6 +93,7 @@ def parse_args():
     model_names = args.model_names
 
     return (use_all, model_names)
+
 
 def load_data(images_path: str):
     # Create a dataset from the directory
@@ -122,8 +124,9 @@ def load_data(images_path: str):
         binarized_batch = label_binarize(
             y_batch, classes=range(len(CLASS_NAMES)))
         y.append(binarized_batch)
-        
+
     return (X, y)
+
 
 def compute_scores(model: Sequential, X: list):
     print(f'\tComputing scores')
@@ -132,8 +135,9 @@ def compute_scores(model: Sequential, X: list):
         print(f'\t\tBatch #{index}')
         y_scores.append(model.predict(
             batch_X, batch_size=BATCH_SIZE, verbose=False))
-        
+
     return y_scores
+
 
 def unbatch_data(y: list, y_scores: list):
     print(f'\tUnbatching data')
@@ -144,9 +148,10 @@ def unbatch_data(y: list, y_scores: list):
         unbatched_y_scores.extend(y_scores_batch)
     unbatched_y = np.array(unbatched_y)
     unbatched_y_scores = np.array(unbatched_y_scores)
-    
+
     return (unbatched_y, unbatched_y_scores)
-    
+
+
 def compute_roc(y: list, y_scores: list):
     print(f'\tComputing FPR, TPR and ROC AUC')
     fpr = dict()
@@ -156,8 +161,9 @@ def compute_roc(y: list, y_scores: list):
         fpr[i], tpr[i], _ = roc_curve(
             y[:, i], y_scores[:, i])
         roc_auc[i] = auc(fpr[i], tpr[i])
-        
+
     return (fpr, tpr, roc_auc)
+
 
 def plot_roc(fpr, tpr, roc_auc, plot_path):
     # Plot all ROC curves
@@ -175,44 +181,78 @@ def plot_roc(fpr, tpr, roc_auc, plot_path):
     plt.ylabel('True Positive Rate')
     plt.title('ROC')
     plt.legend(loc="lower right")
-    
+
     print(f'\tSaving ROC curve as a png file')
     plt.savefig(plot_path)
-    
+
     plt.clf()
-    
+
     # print(f'\tDisplaying plot')
     # plt.show()
 
-def roc(model: Sequential, images_path: str, plot_path: str):
+
+def plot_cm(y: list, y_scores: list, cm_path: str):
+    # Compute confusion matrix
+    print(f'\tComputing confusion matrix')
+    y_test=np.argmax(y, axis=1)
+    y_pred=np.argmax(y_scores, axis=1)
+    cm = confusion_matrix(y_test, y_pred, labels=range(NUM_CLASSES))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm,
+                                  display_labels=range(NUM_CLASSES))
+    disp.plot()
+
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.savefig(cm_path)
+
+
+def plots(model: Sequential, model_name: str, cm_path: str, roc_path: str):
     print(f'Generating ROC curve...')
-    X, y = load_data(images_path)
+    # Get data
+    X, y = load_data(IMAGES_PATH)
     y_scores = compute_scores(model, X)
     y, y_scores = unbatch_data(y, y_scores)
-    fpr, trp, roc_auc = compute_roc(y, y_scores)    
-    plot_roc(fpr, trp, roc_auc, plot_path)
-    print(f'Done generating ROC curves')
 
-def create_paths():
-    roc_paths, model_paths = [], []
+    # Compute and plot confusion matrices
+    if not os.path.exists(cm_path):
+        plot_cm(y, y_scores, cm_path)
+    else:
+        print(
+            f'\tConfusion matrix plot for model "{model_name}" already exists')
+
+    # Compute and plot ROC
+    if not os.path.exists(roc_path):
+        fpr, trp, roc_auc = compute_roc(y, y_scores)
+        plot_roc(fpr, trp, roc_auc, roc_path)
+        print(f'Done generating CMs and ROC curves')
+    else:
+        print(f'\ROC plot for model "{model_name}" already exists')
+
+
+def create_paths(model_names):
+    cm_paths, roc_paths, model_paths = [], [], []
     for model_name in model_names:
         # Make directories if they do not exists
-        model_folder = f'{CUR_DIR}/models/{model_name}'
+        cm_folder = f'{CUR_DIR}/cm-plots/{model_name}'
         roc_folder = f'{CUR_DIR}/roc-plots/{model_name}'
-        os.makedirs(model_folder, exist_ok=True)
+        model_folder = f'{CUR_DIR}/models/{model_name}'
+        os.makedirs(cm_folder, exist_ok=True)
         os.makedirs(roc_folder, exist_ok=True)
+        os.makedirs(model_folder, exist_ok=True)
 
         # Create model and its ROC paths and append them
-        model_path = f'{model_folder}/{model_name}-model.keras'
-        roc_path = f'{roc_folder}/{model_name}-roc.png'
-        model_paths.append(model_path)
-        roc_paths.append(roc_path)
+        cm_paths.append(f'{cm_folder}/{model_name}-cm.png')
+        roc_paths.append(f'{roc_folder}/{model_name}-roc.png')
+        model_paths.append(f'{model_folder}/{model_name}-model.keras')
 
-        print(f'\t"{model_name}" model path: {model_paths[-1]}')
+        print(f'\t"{model_name}" model CM path: {cm_paths[-1]}')
         print(f'\t"{model_name}" model ROC path: {roc_paths[-1]}')
+        print(f'\t"{model_name}" model path: {model_paths[-1]}')
     print('Paths created')
-    
-    return (roc_paths, model_paths)
+
+    return (cm_paths, roc_paths, model_paths)
+
 
 if __name__ == '__main__':
     # Parse args
@@ -220,9 +260,9 @@ if __name__ == '__main__':
     model_names = MODEL_NAMES if use_all else model_names
 
     # Create model path and results arrays
-    roc_paths, model_paths = create_paths()
+    cm_paths, roc_paths, model_paths = create_paths(model_names)
 
     # Generate ROC curve for supplied models
-    for model_name, model_path, roc_path in zip(model_names, model_paths, roc_paths):
+    for model_name, model_path, cm_path, roc_path in zip(model_names, model_paths, cm_paths, roc_paths):
         model = load_model(model_path)
-        roc(model, IMAGES_PATH, roc_path)
+        plots(model, model_name, cm_path, roc_path)

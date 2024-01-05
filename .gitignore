@@ -1,5 +1,9 @@
 code/
 data/
+models/
+results/
+roc-plots/
+cm-plots/
 images/
 images-lite/
 # models/

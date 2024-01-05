@@ -11,17 +11,25 @@ import cv2 as cv
 import argparse
 from keras import layers, utils, Sequential, applications, optimizers, losses
 
-cur_dir = pathlib.PureWindowsPath(os.getcwd()).as_posix()  # Current dir
-img_width, img_height = 224, 224  # Image dims
+CUR_DIR = pathlib.PureWindowsPath(os.getcwd()).as_posix()
+TRAIN_IMAGES_PATH = f'{CUR_DIR}/images/images-train'
+TEST_IMAGES_PATH = f'{CUR_DIR}/images/images-test'
+# TRAIN_IMAGES_PATH
+ROC_PATH = f'{CUR_DIR}/plots'
+
+IMG_WIDTH, IMG_HEIGHT = 224, 224
+
+BATCH_SIZE = 32
 
 MODEL_NAMES = [
     'new',
-    'resnet50',
     'mobile_net',
     'mobile_net_v2',
     'dense_net_121',
     'nas_net_mobile',
+    'resnet50',
 ]
+NUM_MODELS = len(MODEL_NAMES)
 
 CLASS_NAMES = [
     'Arts & Photography',
@@ -41,6 +49,8 @@ CLASS_NAMES = [
     'Science Fiction & Fantasy',
     'Teen & Young Adult',
 ]
+NUM_CLASSES = len(CLASS_NAMES)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -50,10 +60,6 @@ def parse_args():
         'https://paperswithcode.com/paper/judging-a-book-by-its-cover'
         '\nAll credit goes to the people behind that study and dataset.')
 
-    parser.add_argument('-tr', '--train_images_path',
-                        default=f'{cur_dir}/images/images-train')
-    parser.add_argument('-te', '--test_images_path',
-                        default=f'{cur_dir}/images/images-test')
     parser.add_argument('-a', '--use_all', action='store_true', default=False)
     parser.add_argument('-n', '--model_names',
                         choices=MODEL_NAMES,
@@ -62,21 +68,19 @@ def parse_args():
 
     args = parser.parse_args()
 
-    train_images_path = args.train_images_path
-    test_images_path = args.test_images_path
     use_all = args.use_all
     model_names = args.model_names
     epochs = args.epochs
 
-    return (train_images_path, test_images_path, use_all, model_names, epochs)
+    return (use_all, model_names, epochs)
 
 
-def fetch_data(images_path):
+def fetch_data():
     # Fetch data
     print('Fetching data...')
     print('\tImporting training data...')
-    train_ds = keras.utils.image_dataset_from_directory(
-        images_path,
+    train_ds = utils.image_dataset_from_directory(
+        TRAIN_IMAGES_PATH,
         validation_split=0.2,
         subset='training',
         labels='inferred',
@@ -86,8 +90,8 @@ def fetch_data(images_path):
     print('\tTraining data imported')
 
     print('\tImporting testing data...')
-    val_ds = keras.utils.image_dataset_from_directory(
-        images_path,
+    val_ds = utils.image_dataset_from_directory(
+        TRAIN_IMAGES_PATH,
         validation_split=0.2,
         subset='validation',
         labels='inferred',
@@ -97,17 +101,14 @@ def fetch_data(images_path):
     print('\tTesting data imported')
     print('Data fetched')
 
-    # class_names = train_ds.class_names
-
     return (train_ds, val_ds)
 
 
 def create_new_model():
     # Create model
     print('Creating new model...')
-    num_classes = len(CLASS_NAMES)
     model = Sequential([
-        layers.Rescaling(1./255, input_shape=(img_height, img_width, 3)),
+        layers.Rescaling(1./255, input_shape=(IMG_HEIGHT, IMG_WIDTH, 3)),
         layers.Conv2D(16, 3, padding='same', activation='relu'),
         layers.MaxPooling2D(),
         layers.Conv2D(32, 3, padding='same', activation='relu'),
@@ -116,7 +117,7 @@ def create_new_model():
         layers.MaxPooling2D(),
         layers.Flatten(),
         layers.Dense(128, activation='relu'),
-        layers.Dense(num_classes)
+        layers.Dense(NUM_CLASSES)
     ])
     print('Model created')
 
@@ -131,38 +132,38 @@ def create_new_model():
     return model
 
 
-def gen_pretrained_model(model_name):
+def gen_pretrained_model(model_name: str):
     print('Generating pretrained model...')
     base_model = ...
     if model_name == 'resnet50':
         print('\tGenerating Resnet50')
         base_model = applications.ResNet50(
             weights='imagenet',  # Load weights pre-trained on ImageNet.
-            input_shape=(img_width, img_height, 3),
+            input_shape=(IMG_WIDTH, IMG_HEIGHT, 3),
             include_top=False)
     elif model_name == 'mobile_net':
         print('\tGenerating MobileNet')
         base_model = applications.MobileNet(
             weights='imagenet',  # Load weights pre-trained on ImageNet.
-            input_shape=(img_width, img_height, 3),
+            input_shape=(IMG_WIDTH, IMG_HEIGHT, 3),
             include_top=False)
     elif model_name == 'mobile_net_v2':
         print('\tGenerating MobileNetV2')
         base_model = applications.MobileNetV2(
             weights='imagenet',  # Load weights pre-trained on ImageNet.
-            input_shape=(img_width, img_height, 3),
+            input_shape=(IMG_WIDTH, IMG_HEIGHT, 3),
             include_top=False)
     elif model_name == 'dense_net_121':
         print('\tGenerating DenseNet121')
         base_model = applications.DenseNet121(
             weights='imagenet',  # Load weights pre-trained on ImageNet.
-            input_shape=(img_width, img_height, 3),
+            input_shape=(IMG_WIDTH, IMG_HEIGHT, 3),
             include_top=False)
     elif model_name == 'nas_net_mobile':
         print('\tGenerating NASNetMobile')
         base_model = applications.NASNetMobile(
             weights='imagenet',  # Load weights pre-trained on ImageNet.
-            input_shape=(img_width, img_height, 3),
+            input_shape=(IMG_WIDTH, IMG_HEIGHT, 3),
             include_top=False)
 
     # Freeze the model
@@ -170,12 +171,12 @@ def gen_pretrained_model(model_name):
     base_model.trainable = False
 
     print('\tCreating model inputs')
-    inputs = keras.Input(shape=(img_width, img_height, 3))
+    inputs = keras.Input(shape=(IMG_WIDTH, IMG_HEIGHT, 3))
     x = base_model(inputs, training=False)
     x = keras.layers.GlobalAveragePooling2D()(x)
 
     print('\tCreating model outputs')
-    outputs = keras.layers.Dense(len(CLASS_NAMES))(x)
+    outputs = keras.layers.Dense(NUM_CLASSES)(x)
 
     print('\tCreating keras model')
     model = keras.Model(inputs, outputs)
@@ -185,13 +186,18 @@ def gen_pretrained_model(model_name):
     model.compile(optimizer=optimizers.Adam(),
                   loss=losses.SparseCategoricalCrossentropy(),
                   metrics=['accuracy'])
-    
+
     print('Done generating pretrained model')
-    
+
     return model
 
 
-def train_model(model, model_name, model_path, train_ds, val_ds, epochs):
+def train_model(model: Sequential,
+                model_name: str,
+                model_path: str,
+                train_ds: tf.data.Dataset,
+                val_ds: tf.data.Dataset,
+                epochs: int):
     # Train model
     print(f'Training model "{model_name}" ...')
     history = model.fit(
@@ -207,7 +213,7 @@ def train_model(model, model_name, model_path, train_ds, val_ds, epochs):
     print('Model saved')
 
 
-def load_model(model_path):
+def load_model(model_path: str):
     print('Loading model...')
     model = keras.models.load_model(model_path)
     print('Model loaded')
@@ -215,10 +221,7 @@ def load_model(model_path):
     return model
 
 
-def calc_accuracy(test_images_path, model):
-    # Get genres
-    genres = os.listdir(test_images_path)
-
+def calc_accuracy(model: Sequential):
     # Correctness scores, a.k.a. scores for results independent of the confidence
     correctness_score = 0
     max_correctness_score = 0
@@ -230,9 +233,9 @@ def calc_accuracy(test_images_path, model):
     overall_scores = []
 
     print('Testing...')
-    for genre in genres:
+    for genre in CLASS_NAMES:
         # Genre path and images
-        genre_path = f'{test_images_path}/{genre}'
+        genre_path = f'{TEST_IMAGES_PATH}/{genre}'
         images = [f for f in os.listdir(genre_path) if os.path.isfile(
             os.path.join(genre_path, f))]
 
@@ -252,7 +255,7 @@ def calc_accuracy(test_images_path, model):
             image_path = f'{genre_path}/{image}'
 
             img = tf.keras.utils.load_img(
-                image_path, target_size=(img_height, img_width)
+                image_path, target_size=(IMG_HEIGHT, IMG_WIDTH)
             )
             img_array = tf.keras.utils.img_to_array(img)
             img_array = tf.expand_dims(img_array, 0)  # Create a batch
@@ -322,7 +325,7 @@ def calc_accuracy(test_images_path, model):
             average_overall)
 
 
-def save_results(results, results_path):
+def save_results(results: list, results_path: str):
     file_action = 'w' if os.path.exists(results_path) else 'x'
     with open(results_path, file_action) as results_file:
         print(f'Writing results into {results_path}')
@@ -345,55 +348,60 @@ def save_results(results, results_path):
         print(f'Results saved')
 
 
-if __name__ == '__main__':
-    # Parse args
-    train_images_path, test_images_path, use_all, model_names, epochs = parse_args()
-    model_names = MODEL_NAMES if use_all else model_names
-        
-    # Create model path and results arrays
-    print(f'Testing {len(model_names)} models:\n\t{model_names}')
+def create_paths():
     print('Creating model and results paths')
     model_paths, results_paths = [], []
     for model_name in model_names:
         # Make directories if they do not exists
-        model_folder = f'{cur_dir}/models/{model_name}'
-        model_results_folder = f'{cur_dir}/results/{model_name}'
+        model_folder = f'{CUR_DIR}/models/{model_name}'
+        model_results_folder = f'{CUR_DIR}/results/{model_name}'
         os.makedirs(model_folder, exist_ok=True)
         os.makedirs(model_results_folder, exist_ok=True)
-        
+
         # Create model and its results paths and append them
         model_path = f'{model_folder}/{model_name}-model.keras'
         results_path = f'{model_results_folder}/{model_name}-results.txt'
         model_paths.append(model_path)
         results_paths.append(results_path)
-        
+
         print(f'\tModel path: {model_paths[-1]}')
         print(f'\tModel results path: {results_paths[-1]}')
     print('Model and results paths created')
 
-    # Train (if needed) and test supplied models
-    for i in range(len(model_names)):
+    return (model_paths, results_paths)
+
+
+def test_models(model_names: list[str], model_paths: list[str], results_paths: list[str]):
+    for (model_name, model_path, results_path) in zip(model_names, model_paths, results_paths):
         model = 0
         # Load model if trained, train if not trained
-        if os.path.exists(model_paths[i]): # If model is already trained
-            print(f'Model "{model_names[i]}" is already trained, loading it')
-            model = load_model(model_paths[i])
-            print(f'Model "{model_names[i]}" loaded')
-        else: # If model is not yet trained
-            print(f'Model "{model_names[i]}" is not yet trained, beginning training')
-            train_ds, val_ds = fetch_data(train_images_path)
-            model = ...
-            if model_names[i] == 'new':
-                model = create_new_model()
-            else:
-                model = gen_pretrained_model(model_names[i])
-            train_model(model, model_names[i], model_paths[i], train_ds, val_ds, epochs)
-            print(f'Model "{model_names[i]}" trained')
+        if os.path.exists(model_path):  # If model is already trained
+            print(f'Model "{model_name}" is already trained, loading it')
+            model = load_model(model_path)
+            print(f'Model "{model_name}" loaded')
+        else:  # If model is not yet trained
+            print(
+                f'Model "{model_name}" is not yet trained, beginning training')
+            train_ds, val_ds = fetch_data(TRAIN_IMAGES_PATH)
+            model = create_new_model() if model_name == 'new' else gen_pretrained_model(model_name)
+            train_model(model, model_name, model_path,
+                        train_ds, val_ds, epochs)
+            print(f'Model "{model_name}" trained')
 
         # Get results if not yet tested
-        if not os.path.exists(results_paths[i]):
-            results = calc_accuracy(test_images_path, model)
-            save_results(results, results_paths[i])
+        if not os.path.exists(results_path):
+            results = calc_accuracy(model)
+            save_results(results, results_path)
         else:
-            print(f'Results for model "{model_names[i]}" already exist in '
-                  f'the following location: "{results_paths[i]}"')
+            print(f'Results for model "{model_name}" already exist in '
+                  f'the following location: "{results_path}"')
+
+
+if __name__ == '__main__':
+    # Parse args
+    use_all, model_names, epochs = parse_args()
+    model_names = MODEL_NAMES if use_all else model_names
+
+    model_paths, results_paths = create_paths()
+
+    test_models(model_names, model_paths, results_paths)
