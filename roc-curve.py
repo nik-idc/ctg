@@ -179,6 +179,8 @@ def plot_roc(fpr, tpr, roc_auc, plot_path):
     print(f'\tSaving ROC curve as a png file')
     plt.savefig(plot_path)
     
+    plt.clf()
+    
     # print(f'\tDisplaying plot')
     # plt.show()
 
