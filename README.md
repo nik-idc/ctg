@@ -9,7 +9,9 @@ There are 6 models that can be used:
 - Resnet50 ('resnet50')
 
 # Usage
-Dependencies list incoming 😖😖😖😖
+Create a conda environment using: 'conda create --name <env> --file <this file>'
+
+Or you can just install all of the dependencies globally, but that is not recommended
 
 There are 2 files you can use:
 ## main.py
